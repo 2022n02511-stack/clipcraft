@@ -25,67 +25,51 @@ class AIFormatter:
 
         self.client = genai.Client(api_key=api_key)
         self.model = "gemini-3.1-flash-lite"
+        self.protector = ContentProtector()
 
+    
     def format_text(self, text, content_type):
 
         if not text.strip():
             return text
 
-        # Never rewrite programming code.
         if content_type == "code":
             return text
 
-        if content_type == "mixed":
-            instructions = """
-        You are ClipCraft, a precise document formatter.
-
-        The input contains a mixture of prose, programming code,
-        and/or mathematical notation.
-
-        Rules:
-        1. Preserve all original meaning and information.
-        2. Never rewrite or modify programming code.
-        3. Preserve code indentation and syntax exactly.
-        4. Preserve all mathematical expressions and symbols.
-        5. Format prose into readable paragraphs.
-        6. Organize headings and lists where appropriate.
-        7. Use Markdown where helpful.
-        8. Never invent or summarize content.
-        9. Return only the formatted text.
-        """
+        # Protect code before sending text to Gemini.
+        protected_text, saved_code = self.protector.protect_code(text)
 
         instructions = """
-You are ClipCraft, an intelligent text formatting engine.
+    You are ClipCraft, an intelligent text formatting engine.
 
-Your job is to reconstruct messy copied text into
-clean, readable, well-structured Markdown.
+    Your job is to reconstruct messy copied text into
+    clean, readable, well-structured Markdown.
 
-STRICT RULES:
+    STRICT RULES:
 
-1. Preserve the original meaning and all factual information.
-2. Never invent information or complete missing sentences.
-3. Repair broken lines caused by PDF text extraction.
-4. Identify headings and subheadings.
-5. Reconstruct numbered and bulleted lists.
-6. Preserve mathematical equations, symbols and notation.
-7. Preserve technical terminology exactly.
-8. Do not simplify or summarize the material.
-9. Do not add explanations or commentary.
-10. If text is already properly formatted, leave it alone.
-11. Return only the formatted text.
-
-Your priority is accuracy, not creativity.
-"""
+    1. Preserve the original meaning and all factual information.
+    2. Never invent information or complete missing sentences.
+    3. Repair broken lines caused by PDF text extraction.
+    4. Identify headings and subheadings.
+    5. Reconstruct numbered and bulleted lists.
+    6. Preserve mathematical equations, symbols and notation.
+    7. Preserve technical terminology exactly.
+    8. Do not simplify or summarize the material.
+    9. Do not add explanations or commentary.
+    10. Do not modify, remove, or rearrange placeholders.
+    11. If text is already properly formatted, leave it alone.
+    12. Return only the formatted text.
+    """
 
         response = self.client.models.generate_content(
             model=self.model,
             contents=f"""
-Content type: {content_type}
+    Content type: {content_type}
 
-Text to format:
+    Text to format:
 
-{text}
-""",
+    {protected_text}
+    """,
             config={
                 "system_instruction": instructions,
                 "temperature": 0.1,
@@ -96,4 +80,20 @@ Text to format:
         if not response.text:
             raise RuntimeError("Gemini returned an empty response.")
 
-        return response.text.strip()
+        formatted_text = response.text.strip()
+
+        # Verify that Gemini preserved every placeholder.
+        for placeholder, _ in saved_code:
+            if formatted_text.count(placeholder) != 1:
+                raise RuntimeError(
+                    f"Code placeholder was changed or lost: {placeholder}"
+                )
+
+        # Restore the original code.
+        formatted_text = self.protector.restore_code(
+            formatted_text,
+            saved_code
+        )
+
+        return formatted_text
+
