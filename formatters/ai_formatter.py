@@ -21,79 +21,120 @@ class AIFormatter:
         api_key = os.getenv("GEMINI_API_KEY")
 
         if not api_key:
-            raise ValueError("GEMINI_API_KEY is not configured.")
+            raise ValueError(
+                "GEMINI_API_KEY is not configured."
+            )
 
         self.client = genai.Client(api_key=api_key)
-        self.model = "gemini-3.1-flash-lite"
+
+        # Keep the model that worked in your previous test.
+        self.model = "gemini-3.8-flash"
+
         self.protector = ContentProtector()
 
-    
+    def validate_placeholders(self, text, protected):
+
+        positions = []
+
+        for placeholder, _ in protected:
+
+            count = text.count(placeholder)
+
+            if count != 1:
+                raise RuntimeError(
+                    f"Protected content was changed or lost: "
+                    f"{placeholder}"
+                )
+
+            positions.append(text.find(placeholder))
+
+        # Ensure Gemini did not rearrange protected content.
+        if positions != sorted(positions):
+            raise RuntimeError(
+                "Protected content was rearranged by Gemini."
+            )
+
     def format_text(self, text, content_type):
 
-        if not text.strip():
+        if not text or not text.strip():
             return text
 
+        # Never send pure programming code for rewriting.
         if content_type == "code":
             return text
 
-        # Protect code before sending text to Gemini.
-        protected_text, saved_code = self.protector.protect_code(text)
+        # Protect code and mathematical expressions.
+        protected_text, saved_content = (
+            self.protector.protect_code(text)
+        )
 
         instructions = """
-    You are ClipCraft, an intelligent text formatting engine.
+You are ClipCraft, an intelligent text formatting engine.
 
-    Your job is to reconstruct messy copied text into
-    clean, readable, well-structured Markdown.
+Your job is to reconstruct messy copied text into
+clean, readable, well-structured Markdown.
 
-    STRICT RULES:
+STRICT RULES:
 
-    1. Preserve the original meaning and all factual information.
-    2. Never invent information or complete missing sentences.
-    3. Repair broken lines caused by PDF text extraction.
-    4. Identify headings and subheadings.
-    5. Reconstruct numbered and bulleted lists.
-    6. Preserve mathematical equations, symbols and notation.
-    7. Preserve technical terminology exactly.
-    8. Do not simplify or summarize the material.
-    9. Do not add explanations or commentary.
-    10. Do not modify, remove, or rearrange placeholders.
-    11. If text is already properly formatted, leave it alone.
-    12. Return only the formatted text.
-    """
+1. Preserve the original meaning and factual information.
+2. Never invent information or complete missing sentences.
+3. Repair broken lines caused by PDF extraction.
+4. Identify headings and subheadings.
+5. Reconstruct numbered and bulleted lists.
+6. Preserve mathematical notation and technical terminology.
+7. Do not simplify or summarize the material.
+8. Do not add explanations or commentary.
+9. Do not modify, remove, duplicate, or rearrange placeholders.
+10. Preserve the order of all placeholders.
+11. If text is already properly formatted, leave it alone.
+12. Return only the formatted text.
+"""
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=f"""
-    Content type: {content_type}
+        # Request formatting from Gemini.
+        try:
 
-    Text to format:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=f"""
+Content type: {content_type}
 
-    {protected_text}
-    """,
-            config={
-                "system_instruction": instructions,
-                "temperature": 0.1,
-                "max_output_tokens": 8192
-            }
-        )
+Text to format:
 
-        if not response.text:
-            raise RuntimeError("Gemini returned an empty response.")
+{protected_text}
+""",
+                config={
+                    "system_instruction": instructions,
+                    "temperature": 0.1,
+                    "max_output_tokens": 8192
+                }
+            )
 
-        formatted_text = response.text.strip()
+            formatted_text = response.text
 
-        # Verify every protected element appears exactly once.
-        for placeholder, _ in saved_code:
-            if formatted_text.count(placeholder) != 1:
-                raise RuntimeError(
-                    f"Protected content was changed or lost: {placeholder}"
-                )
+        except Exception as error:
 
-        # Restore original content.
-        formatted_text = self.protector.restore_code(
+            raise RuntimeError(
+                f"Gemini formatting request failed: {error}"
+            ) from error
+
+        # Reject empty responses.
+        if not formatted_text or not formatted_text.strip():
+            raise RuntimeError(
+                "Gemini returned an empty response."
+            )
+
+        formatted_text = formatted_text.strip()
+
+        # Validate all protected placeholders.
+        self.validate_placeholders(
             formatted_text,
-            saved_code
+            saved_content
         )
 
-        return formatted_text
+        # Restore original code and mathematical expressions.
+        restored_text = self.protector.restore_code(
+            formatted_text,
+            saved_content
+        )
 
+        return restored_text
