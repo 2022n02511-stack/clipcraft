@@ -71,7 +71,7 @@ class ClipCraftInterface(ServiceInterface):
     @method()
     def GetHistory(self) -> "a(ss)":
         try:
-            return get_recent(10)
+            return [list(row) for row in get_recent(10)]
         except Exception as error:
             print(f"[ClipCraft] History retrieval failed: {error}")
             return []
