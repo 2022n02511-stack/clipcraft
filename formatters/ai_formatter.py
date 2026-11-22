@@ -28,7 +28,7 @@ class AIFormatter:
         self.client = genai.Client(api_key=api_key)
 
         # Keep the model that worked in your previous test.
-        self.model = "gemini-3.8-flash"
+        self.model = "gemini-3.1-flash-lite"
 
         self.protector = ContentProtector()
 

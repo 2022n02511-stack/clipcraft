@@ -2,107 +2,104 @@
 import re
 
 
+def contains_math_expression(text: str) -> bool:
+    patterns = [
+        r"\\(?:frac|sum|int|lim|sqrt)",
+        r"[=<>]\s*[\w(]",
+        r"\b(?:lim|sin|cos|tan|log)\s*\(",
+        r"\b[a-zA-Z]\s*['′]?\s*\([^)]*\)\s*=",
+        r"\b[a-zA-Z]\s*=\s*[\w(]",
+    ]
 
+    return any(re.search(pattern, text) for pattern in patterns)
 
-def contains_mixed_content(text: str) -> bool:
-    # Detect common programming constructs.
+def contains_code(text: str) -> bool:
     code_patterns = [
         r"#include\s*<",
+        r"\busing\s+namespace\b",
+        r"\bint\s+main\s*\(",
         r"\bvector\s*<",
         r"\bmap\s*<",
-        r"\bset\s*<",
-        r"\bstring\s+\w+",
-        r"\bint\s+\w+\s*\(",
-        r"\bdef\s+\w+\s*\(",
         r"\bclass\s+\w+",
+        r"\bdef\s+\w+\s*\(",
         r"\breturn\b",
+        r"\bfor\s*\(",
+        r"\bwhile\s*\(",
         r"[{};]"
     ]
 
-    has_code = any(
-        re.search(pattern, text)
+    score = sum(
+        bool(re.search(pattern, text))
         for pattern in code_patterns
     )
 
-    # Detect mathematical notation.
+    return score >= 2
+
+
+def contains_math(text: str) -> bool:
     math_patterns = [
         r"[∑∫√≤≥≠∞∏∂∇≈±×÷∈∉⊂⊆∀∃]",
         r"\\frac|\\sum|\\int|\\lim|\\sqrt",
-        r"\b[a-zA-Z]\s*\([^)]*\)\s*="
+        r"\b[a-zA-Z]\s*['′]?\s*\([^)]*\)\s*=",
+        r"\blim\s*\(",
+        r"\b[a-zA-Z]\s*\([^)]*\)\s*=",
     ]
 
-    has_math = any(
+    return any(
         re.search(pattern, text)
         for pattern in math_patterns
     )
 
-    # Mixed content means prose combined with code or mathematics.
-    has_prose = bool(re.search(r"[A-Za-z]{3,}\s", text))
 
-    return has_prose and (has_code or has_math)
+def contains_prose(text: str) -> bool:
+    remaining_lines = []
 
+    for line in text.splitlines():
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        # Ignore lines that look like programming code.
+        if re.search(
+            r"[{};]|"
+            r"^\s*#include\b|"
+            r"^\s*using\s+namespace\b|"
+            r"\b(?:int|void|bool|string|float|double)\s+\w+\s*\(",
+            stripped
+        ):
+            continue
+
+        remaining_lines.append(stripped)
+
+    remaining_text = " ".join(remaining_lines)
+    words = re.findall(r"\b[A-Za-z]{3,}\b", remaining_text)
+
+    return len(words) >= 5
 
 
 def detect_content(text: str) -> str:
     if not text.strip():
         return "empty"
 
-    if contains_mixed_content(text):
+    code = contains_code(text)
+    math = contains_math(text)
+    prose = contains_prose(text)
+
+    if code and prose:
         return "mixed"
+
+    if math and prose and contains_math_expression(text):
+        return "mixed"
+
+    if code:
+        return "code"
+
+    if math:
+        return "mathematics"
 
     lines = text.splitlines()
 
-    # Code detection
-    code_patterns = [
-        r"#include\s*<",
-        r"\bdef\s+\w+\s*\(",
-        r"\bclass\s+\w+",
-        r"\b(int|float|double|void|bool|string)\s+\w+\s*\(",
-        r"\bfor\s*\(",
-        r"\bwhile\s*\(",
-        r"\breturn\b",
-        r"[{};]"
-    ]
-
-    code_score = sum(
-        bool(re.search(pattern, text))
-        for pattern in code_patterns
-    )
-
-    if code_score >= 2:
-        return "code"
-
-   
-    # Mathematical notation
-    math_symbols = "∑∫√≤≥≠∞∏∂∇≈±×÷∈∉⊂⊆∀∃"
-
-    math_patterns = [
-        r"\\frac",
-        r"\\sum",
-        r"\\int",
-        r"\\alpha",
-        r"\\beta",
-        r"\\lim",
-        r"\\sqrt",
-        r"\\infty",
-        r"\b(?:lim|sin|cos|tan|log)\s*[\(\w]",
-        r"\b[a-zA-Z]\s*=\s*[-\d]",
-        r"\b[a-zA-Z]\s*\([^)]*\)\s*="
-    ]
-
-    math_score = sum(
-        bool(re.search(pattern, text))
-        for pattern in math_patterns
-    )
-
-    if (
-        any(symbol in text for symbol in math_symbols)
-        or math_score >= 1
-    ):
-        return "mathematics"
-
-
-    # Structured lists
     list_lines = sum(
         bool(re.match(r"^\s*(?:[-*•]|\d+[.)])\s+", line))
         for line in lines
