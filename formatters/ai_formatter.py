@@ -82,14 +82,14 @@ class AIFormatter:
 
         formatted_text = response.text.strip()
 
-        # Verify that Gemini preserved every placeholder.
+        # Verify every protected element appears exactly once.
         for placeholder, _ in saved_code:
             if formatted_text.count(placeholder) != 1:
                 raise RuntimeError(
-                    f"Code placeholder was changed or lost: {placeholder}"
+                    f"Protected content was changed or lost: {placeholder}"
                 )
 
-        # Restore the original code.
+        # Restore original content.
         formatted_text = self.protector.restore_code(
             formatted_text,
             saved_code
