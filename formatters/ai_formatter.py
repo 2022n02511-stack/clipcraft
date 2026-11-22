@@ -13,6 +13,9 @@ logging.getLogger("google.genai").setLevel(logging.ERROR)
 
 from google import genai
 from formatters.protector import ContentProtector
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class AIFormatter:

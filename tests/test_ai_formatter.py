@@ -6,6 +6,7 @@ from formatters.protector import ContentProtector
 
 
 
+
 sample = r"""
 The derivative of a function is written as $f'(x)$.
 
