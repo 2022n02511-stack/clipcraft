@@ -40,3 +40,6 @@ Thumbs.db
 # Logs and temp files
 *.log
 *.tmp.env
+.env
+.env.*
+!.env.example
