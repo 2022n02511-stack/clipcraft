@@ -49,6 +49,17 @@ class ClipCraftInterface(ServiceInterface):
         super().__init__("local.clipcraft.Clipboard")
 
     @method()
+    def SaveHistory(self, text: "s") -> "b":
+        try:
+            if text.strip():
+                save(text, text)
+                print("[ClipCraft] Saved clipboard text to history.")
+            return True
+        except Exception as error:
+            print(f"[ClipCraft] History save failed: {error}")
+            return False
+
+    @method()
     def ReceiveText(self, text: "s") -> "s":
         print(f"\n[ClipCraft] Received {len(text)} characters.")
 
